@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>МУРИНО FM</title>
+    <link rel="icon" href="data:,">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+        body{background-color:#121212;color:#ffffff;font-family:'Montserrat',sans-serif;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100vh;overflow:hidden;position:relative}body::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(rgba(18,18,18,.7),#121212),url(https://www.transparenttextures.com/patterns/dark-noise.png);z-index:-1}.header{width:100%;padding:20px 40px;position:absolute;top:0;left:0;display:flex;justify-content:space-between;align-items:center;box-sizing:border-box}.logo{font-size:24px;font-weight:700;letter-spacing:2px;text-transform:uppercase}.header-buttons a{text-decoration:none;color:#ffffff;background-color:#1DB954;padding:10px 20px;border-radius:50px;font-weight:bold;margin-left:15px;transition:background-color .3s ease,transform .3s ease}.header-buttons a:hover{background-color:#1ed760;transform:scale(1.05)}.player-container{background-color:rgba(30,30,30,.7);padding:40px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.5);text-align:center;width:90%;max-width:500px;backdrop-filter:blur(10px)}#track-title{font-size:24px;font-weight:bold;margin-bottom:20px;min-height:60px;word-wrap:break-word}.visualizer-container{width:100%;height:100px;margin-bottom:30px;display:flex;justify-content:center;align-items:flex-end;gap:4px}.visualizer-bar{width:10px;background:linear-gradient(#1DB954,#121212);transition:height .1s ease-in-out;border-radius:5px 5px 0 0}#start-button{background-color:#1DB954;color:white;border:none;border-radius:50px;padding:20px 40px;font-size:24px;font-weight:bold;cursor:pointer;transition:all .3s ease;position:absolute;z-index:10}#start-button:hover{transform:scale(1.1)}
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">МУРИНО FM</div>
+        <div class="header-buttons">
+            <a href="#">Поддержать проект</a>
+            <a href="https://t.me/jelikton" target="_blank">Разместить рекламу</a>
+        </div>
+    </header>
+    <div class="player-container" id="player" style="visibility: hidden;">
+        <div id="track-title">Подключение к эфиру...</div>
+        <div class="visualizer-container" id="bass-visualizer"></div>
+        <audio id="audio-player" crossorigin="anonymous"></audio>
+    </div>
+    <button id="start-button">▶ СЛУШАТЬ ЭФИР</button>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const audioPlayer = document.getElementById('audio-player');
+            const trackTitle = document.getElementById('track-title');
+            const bassVisualizerContainer = document.getElementById('bass-visualizer');
+            const startButton = document.getElementById('start-button');
+            const playerContainer = document.getElementById('player');
+            let audioContext, analyser;
+            let currentTrackUrl = '';
+
+            function setupAudioContext() {
+                if (audioContext) return;
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaElementSource(audioPlayer);
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                analyser.fftSize = 256;
+                const BARS_COUNT = 32;
+                for (let i = 0; i < BARS_COUNT; i++) {
+                    bassVisualizerContainer.appendChild(document.createElement('div')).classList.add('visualizer-bar');
+                }
+                drawVisualizer();
+            }
+
+            function drawVisualizer() {
+                requestAnimationFrame(drawVisualizer);
+                if (!analyser || audioPlayer.paused) {
+                    document.querySelectorAll('.visualizer-bar').forEach(bar => bar.style.height = '0%');
+                    return;
+                }
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+                const bars = document.querySelectorAll('.visualizer-bar');
+                bars.forEach((bar, i) => {
+                    const index = Math.floor((i / bars.length) * (dataArray.length / 4));
+                    bar.style.height = `${(dataArray[index] / 255) * 100}%`;
+                });
+            }
+
+            async function syncWithServer() {
+                try {
+                    const response = await fetch('/current-song');
+                    if (!response.ok) throw new Error('Server not ready');
+                    const data = await response.json();
+                    if (currentTrackUrl !== data.songUrl) {
+                        currentTrackUrl = data.songUrl;
+                        audioPlayer.src = data.songUrl;
+                        trackTitle.textContent = data.songUrl.split('/').pop().replace('.mp3', '').replace(/_/g, ' ');
+                    }
+                    audioPlayer.currentTime = data.timeIntoSong;
+                    const playPromise = audioPlayer.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.error("Autoplay failed:", error);
+                            trackTitle.textContent = "Нажмите Play для продолжения";
+                        });
+                    }
+                } catch (error) {
+                    console.error("Sync error:", error);
+                    trackTitle.textContent = "Ошибка подключения";
+                    setTimeout(syncWithServer, 5000);
+                }
+            }
+            
+            audioPlayer.addEventListener('ended', () => {
+                syncWithServer();
+            });
+
+            startButton.addEventListener('click', () => {
+                startButton.style.display = 'none';
+                playerContainer.style.visibility = 'visible';
+                setupAudioContext();
+                syncWithServer();
+            });
+        });
+    </script>
+</body>
+</html>
