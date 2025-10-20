@@ -1,3 +1,5 @@
+// ПРАВИЛЬНЫЙ КОД ДЛЯ server.js
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -21,18 +23,13 @@ function shuffle(array) {
 
 shuffle(musicFiles);
 
-// --- ИСПРАВЛЕННАЯ ЛОГИКА СОЗДАНИЯ ПЛЕЙЛИСТА ---
 let fullPlaylist = [];
-const adBlock = adFiles;
-
 for (let i = 0; i < musicFiles.length; i++) {
     fullPlaylist.push(musicFiles[i]);
-    // Добавляем рекламный блок после каждого второго трека
-    if ((i + 1) % 2 === 0 && adBlock.length > 0) {
-        fullPlaylist.push(...adBlock);
+    if ((i + 1) % 2 === 0 && adFiles.length > 0) {
+        fullPlaylist.push(...adFiles);
     }
 }
-// --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 const playlistWithDurations = [];
 
@@ -57,12 +54,12 @@ let songStartTime = 0;
 function startRadio() {
     songStartTime = Date.now();
     scheduleNextTrack();
-    console.log(`Radio is live! Now playing: ${playlistWithDurations[currentTrackIndex].url}`);
+    console.log(`Radio v1.2 Stable is live! Now playing: ${playlistWithDurations[currentTrackIndex].url}`);
 }
 
 function scheduleNextTrack() {
     if (playlistWithDurations.length === 0 || !playlistWithDurations[currentTrackIndex]) {
-        console.log("Playlist is empty or track is missing. Radio stopped.");
+        console.log("Playlist is empty. Radio stopped.");
         return;
     }
     const currentTrack = playlistWithDurations[currentTrackIndex];
@@ -79,14 +76,19 @@ function scheduleNextTrack() {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/current-song', (req, res) => {
-    if (playlistWithDurations.length === 0) {
+    if (playlistWithDurations.length < 1) {
         return res.status(503).json({ error: "Radio is warming up." });
     }
+    
     const currentTrack = playlistWithDurations[currentTrackIndex];
+    const nextTrackIndex = (currentTrackIndex + 1) % playlistWithDurations.length;
+    const nextTrack = playlistWithDurations[nextTrackIndex];
     const timeIntoSong = (Date.now() - songStartTime) / 1000;
+
     res.json({
         songUrl: currentTrack.url,
-        timeIntoSong: timeIntoSong
+        timeIntoSong: timeIntoSong,
+        nextSongUrl: nextTrack.url
     });
 });
 
